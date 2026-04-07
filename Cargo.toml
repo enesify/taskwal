@@ -1,0 +1,24 @@
+[package]
+name = "taskwal"
+version = "0.1.0"
+edition = "2021"
+description = "WAL-based local task tracker (TaskWAL)"
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "tw"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4", features = ["derive"] }
+crossterm = "0.27"
+dirs = "5"
+ratatui = "0.26"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ulid = "1"
+
+[dev-dependencies]
+tempfile = "3"
