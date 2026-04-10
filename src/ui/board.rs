@@ -17,7 +17,7 @@ pub fn draw(f: &mut Frame, app: &App) {
         .constraints([
             Constraint::Length(3),
             Constraint::Min(0),
-            Constraint::Length(3),
+            Constraint::Length(7),
         ])
         .split(size);
 
@@ -70,12 +70,58 @@ pub fn draw(f: &mut Frame, app: &App) {
         Color::Green,
     );
 
+    let footer = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Length(1),
+            Constraint::Length(3),
+        ])
+        .split(rows[2]);
+
     let hint = Paragraph::new(
-        " s start | d done | b back | a Done view | Tab | g stats | q | tw add \"…\" ",
+        " s start | d done | b back | a Done view | Tab | g stats | q | : command ",
     )
     .style(Style::default().fg(Color::DarkGray))
     .block(Block::default().borders(Borders::ALL));
-    f.render_widget(hint, rows[2]);
+    f.render_widget(hint, footer[0]);
+
+    let status_text = app
+        .status_line
+        .as_deref()
+        .unwrap_or("");
+    let status = Paragraph::new(status_text)
+        .style(Style::default().fg(Color::DarkGray))
+        .block(Block::default().borders(Borders::NONE));
+    f.render_widget(status, footer[1]);
+
+    let input_label = if app.command_focused {
+        " command "
+    } else {
+        " command (press :) "
+    };
+    let prompt = if app.command_focused {
+        format!("> {}", app.command_buffer)
+    } else {
+        "> ".to_string()
+    };
+    let input = Paragraph::new(prompt)
+        .style(if app.command_focused {
+            Style::default().fg(Color::White)
+        } else {
+            Style::default().fg(Color::DarkGray)
+        })
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(if app.command_focused {
+                    Style::default().fg(Color::Cyan)
+                } else {
+                    Style::default().fg(Color::DarkGray)
+                })
+                .title(input_label),
+        );
+    f.render_widget(input, footer[2]);
 }
 
 fn render_column(

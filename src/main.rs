@@ -1,18 +1,15 @@
-mod analytics;
-mod state;
-mod ui;
-mod wal;
-
-use anyhow::{bail, Context, Result};
-use chrono::{Local, NaiveDate, Utc};
+use anyhow::Result;
+use chrono::Utc;
 use clap::{Args, Parser, Subcommand};
-use ulid::Ulid;
 
-use crate::state::filter::{apply_daily_view, DailyViewMode};
-use crate::state::replay;
-use crate::state::task::Board;
-use crate::wal::event::{Column, WalEntry, WalEvent};
-use crate::wal::{append, read_all};
+use taskwal::commands::{
+    add_task, back_task, done_task, edit_task, note_task, parse_view_mode, rm_task, short_id,
+    start_task,
+};
+use taskwal::state::filter::{apply_daily_view, DailyViewMode};
+use taskwal::state::replay;
+use taskwal::wal::read_all;
+use taskwal::{analytics, ui};
 
 #[derive(Parser)]
 #[command(name = "tw", about = "TaskWAL — local WAL-backed task tracker")]
@@ -81,161 +78,47 @@ enum Commands {
     Log,
 }
 
-fn parse_view_mode(opts: &ViewOpts) -> Result<DailyViewMode> {
-    if opts.all && opts.date.is_some() {
-        bail!("--all and --date cannot be used together");
-    }
-    if opts.all {
-        return Ok(DailyViewMode::AllDone);
-    }
-    if let Some(d) = &opts.date {
-        let day = NaiveDate::parse_from_str(d, "%Y-%m-%d")
-            .with_context(|| format!("invalid date {:?}", d))?;
-        return Ok(DailyViewMode::Day(day));
-    }
-    Ok(DailyViewMode::Day(Local::now().date_naive()))
-}
-
-fn resolve_task_id(prefix: &str, board: &Board) -> Result<String> {
-    if prefix.is_empty() {
-        bail!("task id prefix cannot be empty");
-    }
-    let mut matches: Vec<&str> = board
-        .todo
-        .iter()
-        .chain(board.doing.iter())
-        .chain(board.done.iter())
-        .map(|t| t.id.as_str())
-        .filter(|id| id.starts_with(prefix))
-        .collect();
-    matches.sort_unstable();
-    matches.dedup();
-    match matches.len() {
-        0 => bail!("no task id matches prefix {:?}", prefix),
-        1 => Ok(matches[0].to_string()),
-        _ => bail!("ambiguous id prefix {:?}", prefix),
-    }
-}
-
-fn short_id(id: &str) -> &str {
-    if id.len() >= 8 {
-        &id[..8]
-    } else {
-        id
-    }
-}
-
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let now = Utc::now();
 
     match cli.command {
         Commands::Add { title, tag } => {
-            let id = Ulid::new().to_string();
-            let entry = WalEntry {
-                ts: now,
-                event: WalEvent::Add {
-                    id: id.clone(),
-                    title: title.clone(),
-                    tags: tag.clone(),
-                    day: Local::now().format("%Y-%m-%d").to_string(),
-                },
-            };
-            append(&entry)?;
-            println!("added [{}] {}", short_id(&id), title);
+            println!("{}", add_task(now, title, tag)?);
         }
 
         Commands::Start { id } => {
             let board = replay()?;
-            let id = resolve_task_id(&id, &board)?;
-            let entry = WalEntry {
-                ts: now,
-                event: WalEvent::Move {
-                    id: id.clone(),
-                    to: Column::Doing,
-                },
-            };
-            append(&entry)?;
-            println!("doing {}", short_id(&id));
+            println!("{}", start_task(now, &board, &id)?);
         }
 
         Commands::Done { id } => {
             let board = replay()?;
-            let id = resolve_task_id(&id, &board)?;
-            let entry = WalEntry {
-                ts: now,
-                event: WalEvent::Move {
-                    id: id.clone(),
-                    to: Column::Done,
-                },
-            };
-            append(&entry)?;
-            println!("done {}", short_id(&id));
+            println!("{}", done_task(now, &board, &id)?);
         }
 
         Commands::Back { id } => {
             let board = replay()?;
-            let id = resolve_task_id(&id, &board)?;
-            let task = board
-                .find_task(&id)
-                .context("task not found after resolve")?;
-            let to = task.column.back_from().context(
-                "task is already at Todo (nowhere to go back)",
-            )?;
-            let entry = WalEntry {
-                ts: now,
-                event: WalEvent::Move {
-                    id: id.clone(),
-                    to,
-                },
-            };
-            append(&entry)?;
-            let label = match to {
-                Column::Doing => "doing",
-                Column::Todo => "todo",
-                Column::Done => unreachable!("back_from never returns Done"),
-            };
-            println!("back -> {} {}", label, short_id(&id));
+            println!("{}", back_task(now, &board, &id)?);
         }
 
         Commands::Edit { id, title } => {
             let board = replay()?;
-            let id = resolve_task_id(&id, &board)?;
-            let entry = WalEntry {
-                ts: now,
-                event: WalEvent::Edit { id: id.clone(), title: title.clone() },
-            };
-            append(&entry)?;
-            println!("updated [{}] {}", short_id(&id), title);
+            println!("{}", edit_task(now, &board, &id, title)?);
         }
 
         Commands::Note { id, text } => {
             let board = replay()?;
-            let id = resolve_task_id(&id, &board)?;
-            let entry = WalEntry {
-                ts: now,
-                event: WalEvent::Note {
-                    id: id.clone(),
-                    text: text.clone(),
-                },
-            };
-            append(&entry)?;
-            println!("note {}", short_id(&id));
+            println!("{}", note_task(now, &board, &id, text)?);
         }
 
         Commands::Rm { id } => {
             let board = replay()?;
-            let id = resolve_task_id(&id, &board)?;
-            let entry = WalEntry {
-                ts: now,
-                event: WalEvent::Delete { id: id.clone() },
-            };
-            append(&entry)?;
-            println!("removed {}", short_id(&id));
+            println!("{}", rm_task(now, &board, &id)?);
         }
 
         Commands::Ls { view } => {
-            let mode = parse_view_mode(&view)?;
+            let mode = parse_view_mode(view.all, view.date.as_deref())?;
             let board = replay()?;
             let view_board = apply_daily_view(&board, mode);
             let day_label = match mode {
@@ -259,7 +142,7 @@ fn main() -> Result<()> {
 
         Commands::Stats => {
             let board = replay()?;
-            let stats = crate::analytics::compute(&board.done);
+            let stats = analytics::compute(&board.done);
             println!("\nStats (all completed tasks)");
             println!("  Total completed      : {}", stats.total_done);
             println!("  Avg cycle time     : {:.1} d", stats.avg_cycle_days);
@@ -276,7 +159,7 @@ fn main() -> Result<()> {
         }
 
         Commands::Board { view } => {
-            let mode = parse_view_mode(&view)?;
+            let mode = parse_view_mode(view.all, view.date.as_deref())?;
             ui::run(mode)?;
         }
     }

@@ -2,15 +2,16 @@ pub mod board;
 pub mod stats;
 
 use anyhow::Result;
-use chrono::Local;
+use chrono::{Local, Utc};
 use crossterm::{
-    event::{self, Event, KeyCode},
+    event::{self, Event, KeyCode, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::io;
 
+use crate::commands::execute_board_line;
 use crate::state::filter::{apply_daily_view, DailyViewMode};
 use crate::state::replay;
 use crate::state::task::Board;
@@ -29,6 +30,11 @@ pub struct App {
     pub selected_col: usize,
     pub selected_row: usize,
     pub screen: ActiveScreen,
+    /// Typed command line when `command_focused` is true.
+    pub command_buffer: String,
+    pub command_focused: bool,
+    /// Last command result or error (cleared on next navigation key).
+    pub status_line: Option<String>,
 }
 
 impl App {
@@ -68,6 +74,33 @@ impl App {
         self.refresh_display();
         Ok(())
     }
+
+    fn clear_status(&mut self) {
+        self.status_line = None;
+    }
+
+    fn run_command_line(&mut self) -> Result<()> {
+        let line = self.command_buffer.trim();
+        if line.is_empty() {
+            self.command_buffer.clear();
+            self.command_focused = false;
+            self.clear_status();
+            return Ok(());
+        }
+        let now = Utc::now();
+        match execute_board_line(line, now, &self.full_board) {
+            Ok(msg) => {
+                self.reload()?;
+                self.status_line = Some(msg);
+            }
+            Err(e) => {
+                self.status_line = Some(format!("{}", e));
+            }
+        }
+        self.command_buffer.clear();
+        self.command_focused = false;
+        Ok(())
+    }
 }
 
 pub fn run(initial_mode: DailyViewMode) -> Result<()> {
@@ -86,6 +119,9 @@ pub fn run(initial_mode: DailyViewMode) -> Result<()> {
         selected_col: 0,
         selected_row: 0,
         screen: ActiveScreen::Board,
+        command_buffer: String::new(),
+        command_focused: false,
+        status_line: None,
     };
     app.clamp_selection();
 
@@ -104,78 +140,117 @@ pub fn run(initial_mode: DailyViewMode) -> Result<()> {
                     }
                     _ => {}
                 },
-                ActiveScreen::Board => match key.code {
-                    KeyCode::Char('q') => break,
-                    KeyCode::Tab => {
-                        app.selected_col = (app.selected_col + 1) % 3;
-                        app.selected_row = 0;
-                        app.clamp_selection();
-                    }
-                    KeyCode::Char('g') | KeyCode::Char('G') => {
-                        app.screen = ActiveScreen::Stats;
-                    }
-                    KeyCode::Char('s') => {
-                        if let Some(id) = app.selected_task_id() {
-                            let now = chrono::Utc::now();
-                            append(&WalEntry {
-                                ts: now,
-                                event: WalEvent::Move {
-                                    id,
-                                    to: Column::Doing,
-                                },
-                            })?;
-                            app.reload()?;
+                ActiveScreen::Board => {
+                    if app.command_focused {
+                        match key.code {
+                            KeyCode::Esc => {
+                                app.command_buffer.clear();
+                                app.command_focused = false;
+                                app.clear_status();
+                            }
+                            KeyCode::Enter => {
+                                app.run_command_line()?;
+                            }
+                            KeyCode::Backspace => {
+                                app.command_buffer.pop();
+                            }
+                            KeyCode::Char(c) => {
+                                if key.modifiers.contains(KeyModifiers::CONTROL) {
+                                    continue;
+                                }
+                                app.command_buffer.push(c);
+                            }
+                            _ => {}
                         }
+                        continue;
                     }
-                    KeyCode::Char('d') => {
-                        if let Some(id) = app.selected_task_id() {
-                            let now = chrono::Utc::now();
-                            append(&WalEntry {
-                                ts: now,
-                                event: WalEvent::Move {
-                                    id,
-                                    to: Column::Done,
-                                },
-                            })?;
-                            app.reload()?;
+
+                    // Navigation mode
+                    match key.code {
+                        KeyCode::Char(':') => {
+                            app.clear_status();
+                            app.command_focused = true;
                         }
-                    }
-                    KeyCode::Char('b') => {
-                        if let Some(id) = app.selected_task_id() {
-                            if let Some(task) = app.full_board.find_task(&id) {
-                                if let Some(to) = task.column.back_from() {
-                                    let now = chrono::Utc::now();
-                                    append(&WalEntry {
-                                        ts: now,
-                                        event: WalEvent::Move { id, to },
-                                    })?;
-                                    app.reload()?;
+                        KeyCode::Char('q') => break,
+                        KeyCode::Tab => {
+                            app.clear_status();
+                            app.selected_col = (app.selected_col + 1) % 3;
+                            app.selected_row = 0;
+                            app.clamp_selection();
+                        }
+                        KeyCode::Char('g') | KeyCode::Char('G') => {
+                            app.clear_status();
+                            app.screen = ActiveScreen::Stats;
+                        }
+                        KeyCode::Char('s') => {
+                            app.clear_status();
+                            if let Some(id) = app.selected_task_id() {
+                                let now = chrono::Utc::now();
+                                append(&WalEntry {
+                                    ts: now,
+                                    event: WalEvent::Move {
+                                        id,
+                                        to: Column::Doing,
+                                    },
+                                })?;
+                                app.reload()?;
+                            }
+                        }
+                        KeyCode::Char('d') => {
+                            app.clear_status();
+                            if let Some(id) = app.selected_task_id() {
+                                let now = chrono::Utc::now();
+                                append(&WalEntry {
+                                    ts: now,
+                                    event: WalEvent::Move {
+                                        id,
+                                        to: Column::Done,
+                                    },
+                                })?;
+                                app.reload()?;
+                            }
+                        }
+                        KeyCode::Char('b') => {
+                            app.clear_status();
+                            if let Some(id) = app.selected_task_id() {
+                                if let Some(task) = app.full_board.find_task(&id) {
+                                    if let Some(to) = task.column.back_from() {
+                                        let now = chrono::Utc::now();
+                                        append(&WalEntry {
+                                            ts: now,
+                                            event: WalEvent::Move { id, to },
+                                        })?;
+                                        app.reload()?;
+                                    }
                                 }
                             }
                         }
-                    }
-                    KeyCode::Char('a') => {
-                        app.view_mode = match app.view_mode {
-                            DailyViewMode::Day(_) => DailyViewMode::AllDone,
-                            DailyViewMode::AllDone => {
-                                DailyViewMode::Day(Local::now().date_naive())
+                        KeyCode::Char('a') => {
+                            app.clear_status();
+                            app.view_mode = match app.view_mode {
+                                DailyViewMode::Day(_) => DailyViewMode::AllDone,
+                                DailyViewMode::AllDone => {
+                                    DailyViewMode::Day(Local::now().date_naive())
+                                }
+                            };
+                            app.refresh_display();
+                        }
+                        KeyCode::Up => {
+                            app.clear_status();
+                            if app.selected_row > 0 {
+                                app.selected_row -= 1;
                             }
-                        };
-                        app.refresh_display();
-                    }
-                    KeyCode::Up => {
-                        if app.selected_row > 0 {
-                            app.selected_row -= 1;
                         }
-                    }
-                    KeyCode::Down => {
-                        let max = app.current_column_len();
-                        if max > 0 && app.selected_row + 1 < max {
-                            app.selected_row += 1;
+                        KeyCode::Down => {
+                            app.clear_status();
+                            let max = app.current_column_len();
+                            if max > 0 && app.selected_row + 1 < max {
+                                app.selected_row += 1;
+                            }
                         }
+                        _ => {}
                     }
-                    _ => {}
-                },
+                }
             }
         }
     }
