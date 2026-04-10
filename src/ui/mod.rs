@@ -4,6 +4,7 @@ pub mod stats;
 use anyhow::Result;
 use chrono::{Local, Utc};
 use crossterm::{
+    cursor::{Hide, MoveTo, Show},
     event::{self, Event, KeyCode, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -131,6 +132,20 @@ pub fn run(initial_mode: DailyViewMode) -> Result<()> {
             ActiveScreen::Stats => stats::draw(f, &app),
         })?;
 
+        let size = terminal.size()?;
+        match (&app.screen, app.command_focused) {
+            (ActiveScreen::Board, true) => {
+                if let Some((col, row)) = board::command_cursor_position(size, &app) {
+                    execute!(terminal.backend_mut(), MoveTo(col, row), Show)?;
+                } else {
+                    execute!(terminal.backend_mut(), Hide)?;
+                }
+            }
+            _ => {
+                execute!(terminal.backend_mut(), Hide)?;
+            }
+        }
+
         if let Event::Key(key) = event::read()? {
             match app.screen {
                 ActiveScreen::Stats => match key.code {
@@ -256,6 +271,7 @@ pub fn run(initial_mode: DailyViewMode) -> Result<()> {
     }
 
     disable_raw_mode()?;
+    execute!(terminal.backend_mut(), Show)?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     Ok(())
 }

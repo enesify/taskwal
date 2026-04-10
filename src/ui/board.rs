@@ -1,17 +1,16 @@
 use chrono::Local;
 use ratatui::{
-    layout::{Constraint, Direction, Layout},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     widgets::{Block, Borders, List, ListItem, Paragraph},
     Frame,
 };
+use unicode_width::UnicodeWidthStr;
 
 use crate::state::task::Task;
 use crate::ui::App;
 
-pub fn draw(f: &mut Frame, app: &App) {
-    let size = f.size();
-
+fn split_main(area: Rect) -> (Rect, Rect, Rect) {
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -19,7 +18,54 @@ pub fn draw(f: &mut Frame, app: &App) {
             Constraint::Min(0),
             Constraint::Length(7),
         ])
-        .split(size);
+        .split(area);
+    (rows[0], rows[1], rows[2])
+}
+
+fn split_footer(footer: Rect) -> (Rect, Rect, Rect) {
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Length(1),
+            Constraint::Length(3),
+        ])
+        .split(footer);
+    (chunks[0], chunks[1], chunks[2])
+}
+
+fn input_block_title(app: &App) -> &'static str {
+    if app.command_focused {
+        " command "
+    } else {
+        " command (press :) "
+    }
+}
+
+/// Terminal cursor position `(column, row)` after `> ` + buffer (insert point), using default cursor style.
+pub fn command_cursor_position(term_area: Rect, app: &App) -> Option<(u16, u16)> {
+    if !app.command_focused {
+        return None;
+    }
+    let (_, _, footer) = split_main(term_area);
+    let (_, _, input_outer) = split_footer(footer);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(input_block_title(app));
+    let inner = block.inner(input_outer);
+    let prefix = "> ";
+    let w = UnicodeWidthStr::width(prefix)
+        .saturating_add(UnicodeWidthStr::width(app.command_buffer.as_str()));
+    let w_u16 = u16::try_from(w).unwrap_or(u16::MAX);
+    let col = inner.x.saturating_add(w_u16);
+    let row = inner.y;
+    Some((col, row))
+}
+
+pub fn draw(f: &mut Frame, app: &App) {
+    let size = f.size();
+
+    let (header_area, cols_area, footer_area) = split_main(size);
 
     let today = Local::now().format("%Y-%m-%d").to_string();
     let mode_label = match app.view_mode {
@@ -31,7 +77,7 @@ pub fn draw(f: &mut Frame, app: &App) {
     let header = Paragraph::new(format!(" TaskWAL  —  today {}  |  {}", today, mode_label))
         .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
         .block(Block::default().borders(Borders::ALL));
-    f.render_widget(header, rows[0]);
+    f.render_widget(header, header_area);
 
     let cols = Layout::default()
         .direction(Direction::Horizontal)
@@ -40,7 +86,7 @@ pub fn draw(f: &mut Frame, app: &App) {
             Constraint::Percentage(33),
             Constraint::Percentage(34),
         ])
-        .split(rows[1]);
+        .split(cols_area);
 
     render_column(
         f,
@@ -70,21 +116,14 @@ pub fn draw(f: &mut Frame, app: &App) {
         Color::Green,
     );
 
-    let footer = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3),
-            Constraint::Length(1),
-            Constraint::Length(3),
-        ])
-        .split(rows[2]);
+    let (hint_area, status_area, input_area) = split_footer(footer_area);
 
     let hint = Paragraph::new(
-        " s start | d done | b back | a Done view | Tab | g stats | q | : command ",
+        " s start | d done | b back | a Done view | Tab | g stats | q | : command | Esc ",
     )
     .style(Style::default().fg(Color::DarkGray))
     .block(Block::default().borders(Borders::ALL));
-    f.render_widget(hint, footer[0]);
+    f.render_widget(hint, hint_area);
 
     let status_text = app
         .status_line
@@ -93,13 +132,9 @@ pub fn draw(f: &mut Frame, app: &App) {
     let status = Paragraph::new(status_text)
         .style(Style::default().fg(Color::DarkGray))
         .block(Block::default().borders(Borders::NONE));
-    f.render_widget(status, footer[1]);
+    f.render_widget(status, status_area);
 
-    let input_label = if app.command_focused {
-        " command "
-    } else {
-        " command (press :) "
-    };
+    let input_label = input_block_title(app);
     let prompt = if app.command_focused {
         format!("> {}", app.command_buffer)
     } else {
@@ -121,7 +156,7 @@ pub fn draw(f: &mut Frame, app: &App) {
                 })
                 .title(input_label),
         );
-    f.render_widget(input, footer[2]);
+    f.render_widget(input, input_area);
 }
 
 fn render_column(
