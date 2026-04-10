@@ -22,6 +22,7 @@ fn split_main(area: Rect) -> (Rect, Rect, Rect) {
     (rows[0], rows[1], rows[2])
 }
 
+/// Footer: command row (top), status (middle), keys hint (bottom).
 fn split_footer(footer: Rect) -> (Rect, Rect, Rect) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -48,7 +49,7 @@ pub fn command_cursor_position(term_area: Rect, app: &App) -> Option<(u16, u16)>
         return None;
     }
     let (_, _, footer) = split_main(term_area);
-    let (_, _, input_outer) = split_footer(footer);
+    let (input_outer, _, _) = split_footer(footer);
     let block = Block::default()
         .borders(Borders::ALL)
         .title(input_block_title(app));
@@ -116,23 +117,7 @@ pub fn draw(f: &mut Frame, app: &App) {
         Color::Green,
     );
 
-    let (hint_area, status_area, input_area) = split_footer(footer_area);
-
-    let hint = Paragraph::new(
-        " s start | d done | b back | a Done view | Tab | g stats | q | : command | Esc ",
-    )
-    .style(Style::default().fg(Color::DarkGray))
-    .block(Block::default().borders(Borders::ALL));
-    f.render_widget(hint, hint_area);
-
-    let status_text = app
-        .status_line
-        .as_deref()
-        .unwrap_or("");
-    let status = Paragraph::new(status_text)
-        .style(Style::default().fg(Color::DarkGray))
-        .block(Block::default().borders(Borders::NONE));
-    f.render_widget(status, status_area);
+    let (input_area, status_area, hint_area) = split_footer(footer_area);
 
     let input_label = input_block_title(app);
     let prompt = if app.command_focused {
@@ -157,6 +142,22 @@ pub fn draw(f: &mut Frame, app: &App) {
                 .title(input_label),
         );
     f.render_widget(input, input_area);
+
+    let status_text = app
+        .status_line
+        .as_deref()
+        .unwrap_or("");
+    let status = Paragraph::new(status_text)
+        .style(Style::default().fg(Color::DarkGray))
+        .block(Block::default().borders(Borders::NONE));
+    f.render_widget(status, status_area);
+
+    let hint = Paragraph::new(
+        " s start | d done | b back | a Done view | Tab | g stats | q | : command | Esc ",
+    )
+    .style(Style::default().fg(Color::DarkGray))
+    .block(Block::default().borders(Borders::ALL));
+    f.render_widget(hint, hint_area);
 }
 
 fn render_column(
