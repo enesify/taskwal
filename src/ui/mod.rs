@@ -140,6 +140,20 @@ pub fn run(initial_mode: DailyViewMode) -> Result<()> {
                             app.reload()?;
                         }
                     }
+                    KeyCode::Char('b') => {
+                        if let Some(id) = app.selected_task_id() {
+                            if let Some(task) = app.full_board.find_task(&id) {
+                                if let Some(to) = task.column.back_from() {
+                                    let now = chrono::Utc::now();
+                                    append(&WalEntry {
+                                        ts: now,
+                                        event: WalEvent::Move { id, to },
+                                    })?;
+                                    app.reload()?;
+                                }
+                            }
+                        }
+                    }
                     KeyCode::Char('a') => {
                         app.view_mode = match app.view_mode {
                             DailyViewMode::Day(_) => DailyViewMode::AllDone,

@@ -47,6 +47,10 @@ enum Commands {
     Done {
         id: String,
     },
+    /// Move one step back (Done → Doing, Doing → Todo)
+    Back {
+        id: String,
+    },
     /// Rename a task
     Edit {
         id: String,
@@ -167,6 +171,31 @@ fn main() -> Result<()> {
             };
             append(&entry)?;
             println!("done {}", short_id(&id));
+        }
+
+        Commands::Back { id } => {
+            let board = replay()?;
+            let id = resolve_task_id(&id, &board)?;
+            let task = board
+                .find_task(&id)
+                .context("task not found after resolve")?;
+            let to = task.column.back_from().context(
+                "task is already at Todo (nowhere to go back)",
+            )?;
+            let entry = WalEntry {
+                ts: now,
+                event: WalEvent::Move {
+                    id: id.clone(),
+                    to,
+                },
+            };
+            append(&entry)?;
+            let label = match to {
+                Column::Doing => "doing",
+                Column::Todo => "todo",
+                Column::Done => unreachable!("back_from never returns Done"),
+            };
+            println!("back -> {} {}", label, short_id(&id));
         }
 
         Commands::Edit { id, title } => {

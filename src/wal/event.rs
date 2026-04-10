@@ -39,11 +39,22 @@ pub struct WalEntry {
     pub event: WalEvent,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Column {
     Todo,
     Doing,
     Done,
+}
+
+impl Column {
+    /// One step backward on the Todo → Doing → Done pipeline.
+    pub fn back_from(self) -> Option<Self> {
+        match self {
+            Column::Done => Some(Column::Doing),
+            Column::Doing => Some(Column::Todo),
+            Column::Todo => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

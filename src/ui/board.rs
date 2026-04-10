@@ -71,7 +71,7 @@ pub fn draw(f: &mut Frame, app: &App) {
     );
 
     let hint = Paragraph::new(
-        " s start | d done | a toggle Done column | Tab column | g stats | q quit | add: tw add \"…\" ",
+        " s start | d done | b back | a Done view | Tab | g stats | q | tw add \"…\" ",
     )
     .style(Style::default().fg(Color::DarkGray))
     .block(Block::default().borders(Borders::ALL));
