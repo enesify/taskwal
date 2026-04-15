@@ -169,6 +169,11 @@ fn render_column(
     selected_row: usize,
     color: Color,
 ) {
+    let selected_row_style = Style::default()
+        .fg(Color::Black)
+        .bg(Color::Rgb(255, 165, 0))
+        .add_modifier(Modifier::BOLD);
+
     let border_style = if is_selected {
         Style::default().fg(color).add_modifier(Modifier::BOLD)
     } else {
@@ -196,7 +201,7 @@ fn render_column(
             };
             let label = format!(" {} [{}] {}{}", prefix, short, task.title, tags);
             let style = if is_selected && i == selected_row {
-                Style::default().fg(Color::White).add_modifier(Modifier::REVERSED)
+                selected_row_style
             } else {
                 Style::default().fg(Color::White)
             };
