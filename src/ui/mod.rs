@@ -15,7 +15,7 @@ use std::io;
 use crate::commands::execute_board_line;
 use crate::state::filter::{apply_daily_view, DailyViewMode};
 use crate::state::replay;
-use crate::state::task::Board;
+use crate::state::task::{Board, Task};
 use crate::wal::event::{Column, WalEntry, WalEvent};
 use crate::wal::append;
 
@@ -33,6 +33,8 @@ pub struct App {
     pub screen: ActiveScreen,
     /// Typed command line when `command_focused` is true.
     pub command_buffer: String,
+    /// Byte index in `command_buffer` for insert/delete/cursor (UTF-8 boundary).
+    pub command_cursor: usize,
     pub command_focused: bool,
     /// Last command result or error (cleared on next navigation key).
     pub status_line: Option<String>,
@@ -76,6 +78,16 @@ impl App {
         Ok(())
     }
 
+    /// Move selection to the row that contains `id` in the current display board (after a move).
+    fn focus_task_by_id(&mut self, id: &str) {
+        if let Some((col, row)) = task_position_in_board(&self.display, id) {
+            self.selected_col = col;
+            self.selected_row = row;
+        } else {
+            self.clamp_selection();
+        }
+    }
+
     fn clear_status(&mut self) {
         self.status_line = None;
     }
@@ -84,6 +96,7 @@ impl App {
         let line = self.command_buffer.trim();
         if line.is_empty() {
             self.command_buffer.clear();
+            self.command_cursor = 0;
             self.command_focused = false;
             self.clear_status();
             return Ok(());
@@ -99,8 +112,156 @@ impl App {
             }
         }
         self.command_buffer.clear();
+        self.command_cursor = 0;
         self.command_focused = false;
         Ok(())
+    }
+
+    /// Selected task in the current column/row, if any (empty column → `None`).
+    pub fn selected_task(&self) -> Option<&Task> {
+        let tasks = match self.selected_col {
+            0 => &self.display.todo,
+            1 => &self.display.doing,
+            _ => &self.display.done,
+        };
+        tasks.get(self.selected_row)
+    }
+
+    /// Footer middle: command result/error if set, otherwise a one-line preview of the selected task.
+    pub fn footer_status_text(&self) -> String {
+        if let Some(ref s) = self.status_line {
+            return s.clone();
+        }
+        self.selected_task()
+            .map(format_selected_task_preview)
+            .unwrap_or_default()
+    }
+}
+
+fn task_position_in_board(board: &Board, id: &str) -> Option<(usize, usize)> {
+    if let Some(i) = board.todo.iter().position(|t| t.id == id) {
+        return Some((0, i));
+    }
+    if let Some(i) = board.doing.iter().position(|t| t.id == id) {
+        return Some((1, i));
+    }
+    if let Some(i) = board.done.iter().position(|t| t.id == id) {
+        return Some((2, i));
+    }
+    None
+}
+
+fn insert_char_at_cursor(buf: &mut String, cursor: &mut usize, c: char) {
+    buf.insert(*cursor, c);
+    *cursor += c.len_utf8();
+}
+
+fn backspace_at_cursor(buf: &mut String, cursor: &mut usize) {
+    if *cursor == 0 || *cursor > buf.len() {
+        return;
+    }
+    let prev = buf[..*cursor]
+        .char_indices()
+        .next_back()
+        .map(|(i, _)| i)
+        .unwrap_or(0);
+    buf.replace_range(prev..*cursor, "");
+    *cursor = prev;
+}
+
+fn cursor_step_left(buf: &str, cursor: &mut usize) {
+    if *cursor == 0 {
+        return;
+    }
+    *cursor = buf[..*cursor]
+        .char_indices()
+        .next_back()
+        .map(|(i, _)| i)
+        .unwrap_or(0);
+}
+
+fn cursor_step_right(buf: &str, cursor: &mut usize) {
+    if *cursor >= buf.len() {
+        return;
+    }
+    let ch = buf[*cursor..].chars().next().unwrap();
+    *cursor += ch.len_utf8();
+}
+
+fn format_selected_task_preview(task: &Task) -> String {
+    let mut out = format!("{}  {}", task.id, task.title);
+    if !task.tags.is_empty() {
+        out.push_str(&format!("  [{}]", task.tags.join(", ")));
+    }
+    if !task.notes.is_empty() {
+        out.push_str("  |  ");
+        out.push_str(&task.notes.join("; "));
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::wal::event::Column;
+    use chrono::Utc;
+
+    #[test]
+    fn format_preview_includes_id_title_tags_notes() {
+        let task = Task {
+            id: "01HZTESTTESTTEST".to_string(),
+            title: "Fix the board".to_string(),
+            tags: vec!["bug".to_string(), "ui".to_string()],
+            column: Column::Todo,
+            notes: vec!["see BAT-9".to_string(), "wrap long lines".to_string()],
+            created_at: Utc::now(),
+            started_at: None,
+            done_at: None,
+            created_day: "2026-04-20".to_string(),
+        };
+        let s = format_selected_task_preview(&task);
+        assert!(s.contains("01HZTESTTESTTEST"));
+        assert!(s.contains("Fix the board"));
+        assert!(s.contains("[bug, ui]"));
+        assert!(s.contains("see BAT-9; wrap long lines"));
+    }
+
+    #[test]
+    fn task_position_finds_column_and_row() {
+        let mut board = Board::default();
+        let t = Task {
+            id: "01HZFINDME000000".to_string(),
+            title: "x".to_string(),
+            tags: vec![],
+            column: Column::Doing,
+            notes: vec![],
+            created_at: Utc::now(),
+            started_at: None,
+            done_at: None,
+            created_day: "2026-04-20".to_string(),
+        };
+        board.doing.push(t);
+        assert_eq!(
+            task_position_in_board(&board, "01HZFINDME000000"),
+            Some((1, 0))
+        );
+    }
+
+    #[test]
+    fn command_cursor_inserts_and_moves() {
+        let mut buf = String::new();
+        let mut cur = 0usize;
+        insert_char_at_cursor(&mut buf, &mut cur, 'a');
+        insert_char_at_cursor(&mut buf, &mut cur, 'b');
+        assert_eq!(buf, "ab");
+        assert_eq!(cur, 2);
+        cursor_step_left(&buf, &mut cur);
+        assert_eq!(cur, 1);
+        insert_char_at_cursor(&mut buf, &mut cur, 'X');
+        assert_eq!(buf, "aXb");
+        backspace_at_cursor(&mut buf, &mut cur);
+        assert_eq!(buf, "ab");
+        assert_eq!(cur, 1);
     }
 }
 
@@ -121,6 +282,7 @@ pub fn run(initial_mode: DailyViewMode) -> Result<()> {
         selected_row: 0,
         screen: ActiveScreen::Board,
         command_buffer: String::new(),
+        command_cursor: 0,
         command_focused: false,
         status_line: None,
     };
@@ -160,6 +322,7 @@ pub fn run(initial_mode: DailyViewMode) -> Result<()> {
                         match key.code {
                             KeyCode::Esc => {
                                 app.command_buffer.clear();
+                                app.command_cursor = 0;
                                 app.command_focused = false;
                                 app.clear_status();
                             }
@@ -167,13 +330,19 @@ pub fn run(initial_mode: DailyViewMode) -> Result<()> {
                                 app.run_command_line()?;
                             }
                             KeyCode::Backspace => {
-                                app.command_buffer.pop();
+                                backspace_at_cursor(&mut app.command_buffer, &mut app.command_cursor);
+                            }
+                            KeyCode::Left => {
+                                cursor_step_left(&app.command_buffer, &mut app.command_cursor);
+                            }
+                            KeyCode::Right => {
+                                cursor_step_right(&app.command_buffer, &mut app.command_cursor);
                             }
                             KeyCode::Char(c) => {
                                 if key.modifiers.contains(KeyModifiers::CONTROL) {
                                     continue;
                                 }
-                                app.command_buffer.push(c);
+                                insert_char_at_cursor(&mut app.command_buffer, &mut app.command_cursor, c);
                             }
                             _ => {}
                         }
@@ -185,6 +354,7 @@ pub fn run(initial_mode: DailyViewMode) -> Result<()> {
                         KeyCode::Char(':') => {
                             app.clear_status();
                             app.command_focused = true;
+                            app.command_cursor = app.command_buffer.len();
                         }
                         KeyCode::Char('q') => break,
                         KeyCode::Tab => {
@@ -204,11 +374,12 @@ pub fn run(initial_mode: DailyViewMode) -> Result<()> {
                                 append(&WalEntry {
                                     ts: now,
                                     event: WalEvent::Move {
-                                        id,
+                                        id: id.clone(),
                                         to: Column::Doing,
                                     },
                                 })?;
                                 app.reload()?;
+                                app.focus_task_by_id(&id);
                             }
                         }
                         KeyCode::Char('d') => {
@@ -218,11 +389,12 @@ pub fn run(initial_mode: DailyViewMode) -> Result<()> {
                                 append(&WalEntry {
                                     ts: now,
                                     event: WalEvent::Move {
-                                        id,
+                                        id: id.clone(),
                                         to: Column::Done,
                                     },
                                 })?;
                                 app.reload()?;
+                                app.focus_task_by_id(&id);
                             }
                         }
                         KeyCode::Char('b') => {
@@ -233,9 +405,13 @@ pub fn run(initial_mode: DailyViewMode) -> Result<()> {
                                         let now = chrono::Utc::now();
                                         append(&WalEntry {
                                             ts: now,
-                                            event: WalEvent::Move { id, to },
+                                            event: WalEvent::Move {
+                                                id: id.clone(),
+                                                to,
+                                            },
                                         })?;
                                         app.reload()?;
+                                        app.focus_task_by_id(&id);
                                     }
                                 }
                             }

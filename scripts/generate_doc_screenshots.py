@@ -30,8 +30,8 @@ YELLOW = (220, 220, 100)
 BLUE = (120, 160, 255)
 GREEN = (120, 220, 160)
 GRAY = (100, 100, 100)
-ORANGE = (255, 165, 0)
 BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
 
 
 def _font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
@@ -81,8 +81,9 @@ def draw_board(path: Path) -> None:
         for line, is_sel in rows:
             if is_sel:
                 bbox = dr.textbbox((x + 10, yy), line, font=mono)
-                dr.rectangle([bbox[0] - 2, bbox[1] - 1, bbox[2] + 2, bbox[3] + 1], fill=ORANGE)
-                dr.text((x + 10, yy), line, fill=BLACK, font=mono)
+                dr.rectangle([bbox[0] - 2, bbox[1] - 1, bbox[2] + 2, bbox[3] + 1], fill=border)
+                txt = WHITE if border == BLUE else BLACK
+                dr.text((x + 10, yy), line, fill=txt, font=mono)
             else:
                 dr.text((x + 10, yy), line, fill=FG, font=mono)
             yy += 20
@@ -91,12 +92,24 @@ def draw_board(path: Path) -> None:
     col_block(8 + col_w, "DOING", titles[1][1], rows_doing, False)
     col_block(8 + 2 * col_w, "DONE", titles[2][1], rows_done, False)
 
-    fy = y0 + col_h + 8
-    dr.rectangle([4, fy, w - 5, fy + 32], outline=GRAY, width=1)
-    dr.text((10, fy + 8), "> ", fill=GRAY, font=mono)
-    dr.text((10, fy + 52), " command (press :) ", fill=GRAY, font=small)
-    hint = " s start | d done | b back | a Done view | Tab | g stats | q | : command | Esc "
-    dr.text((10, h - 28), hint, fill=GRAY, font=small)
+    footer_top = y0 + col_h + 8
+    dr.text(
+        (10, footer_top),
+        "01DEF45678901234  Review PR  [docs, team]  |  note: one-line status",
+        fill=GRAY,
+        font=small,
+    )
+    cmd_top = footer_top + 20
+    dr.rectangle([4, cmd_top, w - 5, cmd_top + 32], outline=GRAY, width=1)
+    dr.text((10, cmd_top + 4), " command (press :) ", fill=GRAY, font=small)
+    dr.text((10, cmd_top + 20), "> ", fill=GRAY, font=mono)
+    hint_top = h - 46
+    dr.rectangle([4, hint_top, w - 5, h - 6], outline=GRAY, width=1)
+    dr.text((10, hint_top + 4), " keymap ", fill=GRAY, font=small)
+    hint = (
+        " s start | d done | b back | a Done view | Tab | g stats | q | : command | Esc | ←/→ "
+    )
+    dr.text((10, hint_top + 22), hint, fill=GRAY, font=small)
 
     im.save(path, "PNG")
 

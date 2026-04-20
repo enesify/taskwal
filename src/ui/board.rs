@@ -5,7 +5,7 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, Paragraph},
     Frame,
 };
-use unicode_width::UnicodeWidthStr;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::state::task::Task;
 use crate::ui::App;
@@ -22,17 +22,45 @@ fn split_main(area: Rect) -> (Rect, Rect, Rect) {
     (rows[0], rows[1], rows[2])
 }
 
-/// Footer: command row (top), status (middle), keys hint (bottom).
+/// Footer: single-line status (top), command row (middle), keys hint (bottom).
 fn split_footer(footer: Rect) -> (Rect, Rect, Rect) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),
             Constraint::Length(1),
+            Constraint::Length(3),
             Constraint::Length(3),
         ])
         .split(footer);
     (chunks[0], chunks[1], chunks[2])
+}
+
+/// Truncate to one terminal row (ellipsis when shortened).
+fn fit_status_line(s: &str, max_cols: u16) -> String {
+    let max = max_cols as usize;
+    if max == 0 {
+        return String::new();
+    }
+    if UnicodeWidthStr::width(s) <= max {
+        return s.to_string();
+    }
+    let ell = "…";
+    let ell_w = UnicodeWidthStr::width(ell);
+    if max <= ell_w {
+        return ell.chars().take(max).collect();
+    }
+    let budget = max - ell_w;
+    let mut acc = 0usize;
+    let mut end_byte = 0usize;
+    for (i, ch) in s.char_indices() {
+        let w = UnicodeWidthChar::width(ch).unwrap_or(0);
+        if acc + w > budget {
+            break;
+        }
+        acc += w;
+        end_byte = i + ch.len_utf8();
+    }
+    format!("{}{}", &s[..end_byte], ell)
 }
 
 fn input_block_title(app: &App) -> &'static str {
@@ -49,14 +77,18 @@ pub fn command_cursor_position(term_area: Rect, app: &App) -> Option<(u16, u16)>
         return None;
     }
     let (_, _, footer) = split_main(term_area);
-    let (input_outer, _, _) = split_footer(footer);
+    let (_, input_outer, _) = split_footer(footer);
     let block = Block::default()
         .borders(Borders::ALL)
         .title(input_block_title(app));
     let inner = block.inner(input_outer);
     let prefix = "> ";
-    let w = UnicodeWidthStr::width(prefix)
-        .saturating_add(UnicodeWidthStr::width(app.command_buffer.as_str()));
+    let mut c = app.command_cursor.min(app.command_buffer.len());
+    while c > 0 && !app.command_buffer.is_char_boundary(c) {
+        c -= 1;
+    }
+    let before = &app.command_buffer[..c];
+    let w = UnicodeWidthStr::width(prefix).saturating_add(UnicodeWidthStr::width(before));
     let w_u16 = u16::try_from(w).unwrap_or(u16::MAX);
     let col = inner.x.saturating_add(w_u16);
     let row = inner.y;
@@ -117,7 +149,15 @@ pub fn draw(f: &mut Frame, app: &App) {
         Color::Green,
     );
 
-    let (input_area, status_area, hint_area) = split_footer(footer_area);
+    let (status_area, input_area, hint_area) = split_footer(footer_area);
+
+    let status_raw = app.footer_status_text();
+    let status_w = status_area.width;
+    let status_text = fit_status_line(&status_raw, status_w);
+    let status = Paragraph::new(status_text)
+        .style(Style::default().fg(Color::DarkGray))
+        .block(Block::default().borders(Borders::NONE));
+    f.render_widget(status, status_area);
 
     let input_label = input_block_title(app);
     let prompt = if app.command_focused {
@@ -143,21 +183,23 @@ pub fn draw(f: &mut Frame, app: &App) {
         );
     f.render_widget(input, input_area);
 
-    let status_text = app
-        .status_line
-        .as_deref()
-        .unwrap_or("");
-    let status = Paragraph::new(status_text)
-        .style(Style::default().fg(Color::DarkGray))
-        .block(Block::default().borders(Borders::NONE));
-    f.render_widget(status, status_area);
-
     let hint = Paragraph::new(
-        " s start | d done | b back | a Done view | Tab | g stats | q | : command | Esc ",
+        " s start | d done | b back | a Done view | Tab | g stats | q | : command | Esc | ←/→ ",
     )
     .style(Style::default().fg(Color::DarkGray))
-    .block(Block::default().borders(Borders::ALL));
+    .block(Block::default().borders(Borders::ALL).title(" keymap "));
     f.render_widget(hint, hint_area);
+}
+
+fn selection_style(column_accent: Color) -> Style {
+    let fg = match column_accent {
+        Color::Blue => Color::White,
+        _ => Color::Black,
+    };
+    Style::default()
+        .fg(fg)
+        .bg(column_accent)
+        .add_modifier(Modifier::BOLD)
 }
 
 fn render_column(
@@ -169,10 +211,7 @@ fn render_column(
     selected_row: usize,
     color: Color,
 ) {
-    let selected_row_style = Style::default()
-        .fg(Color::Black)
-        .bg(Color::Rgb(255, 165, 0))
-        .add_modifier(Modifier::BOLD);
+    let selected_row_style = selection_style(color);
 
     let border_style = if is_selected {
         Style::default().fg(color).add_modifier(Modifier::BOLD)
