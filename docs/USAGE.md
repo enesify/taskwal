@@ -119,7 +119,9 @@ tw board --date 2026-04-01
 
 ![Board TUI](images/board.png)
 
-The **focused column** highlights its border. The **selected row** uses an **orange** background with bold text so the cursor stays visible on light and dark terminal themes.
+The **focused column** highlights its border. The **selected row** uses the **same accent color as that column** (yellow / blue / green) as its background, with bold text (black on yellow and green, white on blue) so the cursor stays visible.
+
+Above the **command** box, a one-line **status** strip shows the **selected task** (id, title, tags, and notes) when you are not viewing command output, so you can read fields that are clipped in the column list; very long lines are truncated to the terminal width. After you run a `:` command, that strip shows the result or error until you move with **Tab**, arrows, or another navigation key.
 
 **Board keys:**
 
@@ -136,7 +138,9 @@ The **focused column** highlights its border. The **selected row** uses an **ora
 | `:`       | Command line (see below) |
 | `Esc`     | Cancel command line |
 
-**Command line (`:`):** type a line such as `add My task` or `start 01ABC123` (optional `tw` prefix). Press **Enter** to run, **Esc** to cancel.
+After **`s`**, **`d`**, or **`b`**, the same task stays selected and highlighted in its new column (if it is still visible in the current view).
+
+**Command line (`:`):** type a line such as `add My task` or `start 01ABC123` (optional `tw` prefix). Press **Enter** to run, **Esc** to cancel. Use **←** / **→** to move the cursor while editing.
 
 **Stats screen:**
 

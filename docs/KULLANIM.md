@@ -123,7 +123,9 @@ tw board --date 2026-04-01
 
 ![Board TUI](images/board.png)
 
-**Seçili kolon** kenarlığı vurgulanır. **Seçili satır** açık ve koyu temalarda okunaklı görünsün diye **turuncu** arka plan ve kalın yazı ile gösterilir.
+**Seçili kolon** kenarlığı vurgulanır. **Seçili satır**, o kolonun **vurgu rengiyle** (sarı / mavi / yeşil) aynı arka plan ve kalın yazı ile gösterilir (sarı ve yeşilde siyah, mavi üzerinde beyaz metin).
+
+**Komut** kutusunun üstünde, tek satırlık bir **durum** şeridi komut çıktısı yokken **seçili görevi** gösterir (kimlik, başlık, etiketler, notlar); kolonda kesilen uzun metinler burada okunabilir; satır terminal genişliğine göre kısaltılabilir. `:` ile bir komut çalıştırdıktan sonra şerit, sonuç veya hatayı **Tab**, ok tuşları veya başka bir gezinme tuşuna basana kadar gösterir.
 
 **Klavye (board ekranı):**
 
@@ -141,7 +143,9 @@ tw board --date 2026-04-01
 | `:`       | Komut satırı (aşağıya bakın)                                           |
 | `Esc`     | Komut satırında iptal                                                  |
 
-**Komut satırı (`:`):** Örneğin `add Yeni görev` veya `start 01ABC123` yazın (`tw` öneki isteğe bağlı). **Enter** ile çalıştırın, **Esc** ile iptal.
+**`s`**, **`d`** veya **`b`** ile taşıdıktan sonra aynı görev seçili kalır ve yeni kolonunda vurgulanır (güncel görünümde hâlâ listeleniyorsa).
+
+**Komut satırı (`:`):** Örneğin `add Yeni görev` veya `start 01ABC123` yazın (`tw` öneki isteğe bağlı). **Enter** ile çalıştırın, **Esc** ile iptal. Düzenlerken imleci **←** / **→** ile taşıyın.
 
 **İstatistik ekranı:**
 
