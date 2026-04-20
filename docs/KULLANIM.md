@@ -2,6 +2,8 @@
 
 Bu belge, projenin **mevcut sürümü** için komut satırı ve TUI kullanımını anlatır.
 
+İngilizce aynı seviyede kılavuz: [USAGE.md](USAGE.md).
+
 ## Uygulama nedir?
 
 TaskWAL, görevlerinizi **yerel bilgisayarınızda** tutan bir iş takip aracıdır. Tüm değişiklikler, silme dahil, **append-only** bir günlük dosyasına (WAL) yazılır; uygulama bu dosyayı okuyup güncel pano (Todo / Doing / Done) durumunu **yeniden oynatarak** (replay) üretir.
@@ -17,7 +19,7 @@ TaskWAL, görevlerinizi **yerel bilgisayarınızda** tutan bir iş takip aracıd
 
 Özel konum için ortam değişkeni:
 
-- `**TASKWAL_DIR`**: Veri klasörü. WAL yolu: `$TASKWAL_DIR/wal.log` (Windows’ta `%TASKWAL_DIR%\wal.log`).
+- **`TASKWAL_DIR`**: Veri klasörü. WAL yolu: `$TASKWAL_DIR/wal.log` (Windows’ta `%TASKWAL_DIR%\wal.log`).
 
 ## Kurulum ve `tw` komutu
 
@@ -51,8 +53,8 @@ tw <komut> --help
 **Done** kolonu:
 
 - **Varsayılan:** Yerel saat diliminde **seçilen takvim gününde** tamamlanan görevler. Seçim belirtilmezse gün = **bugün**.
-- `**--all`:** Tamamlanan **tüm** görevler (geçmiş dahil); Todo/Doing yine tüm açık işlerdir.
-- `**--date YYYY-MM-DD`:** Done kolonu yalnızca o yerel güne düşen tamamlamalara göre süzülür.
+- **`--all`:** Tamamlanan **tüm** görevler (geçmiş dahil); Todo/Doing yine tüm açık işlerdir.
+- **`--date YYYY-MM-DD`:** Done kolonu yalnızca o yerel güne düşen tamamlamalara göre süzülür.
 
 `--all` ile `--date` **birlikte kullanılamaz.**
 
@@ -69,7 +71,7 @@ tw add "API taslağını yaz"
 tw add "Review" --tag backend,urgent
 ```
 
-- `**--tag` / `-t`:** Virgülle ayrılmış etiket listesi.
+- **`--tag` / `-t`:** Virgülle ayrılmış etiket listesi.
 
 ### `tw start <id>`
 
@@ -78,6 +80,10 @@ Görevi **Doing** kolonuna taşır. İlk kez Doing’e geçişte “başlangıç
 ### `tw done <id>`
 
 Görevi **Done** kolonuna taşır; tamamlanma zamanı kaydedilir.
+
+### `tw back <id>`
+
+Görevi **bir kolon geri** alır: Done → Doing → Todo (uygun olduğunda).
 
 ### `tw edit <id> <yeni başlık>`
 
@@ -115,6 +121,10 @@ tw board --all
 tw board --date 2026-04-01
 ```
 
+![Board TUI](images/board.png)
+
+**Seçili kolon** kenarlığı vurgulanır. **Seçili satır** açık ve koyu temalarda okunaklı görünsün diye **turuncu** arka plan ve kalın yazı ile gösterilir.
+
 **Klavye (board ekranı):**
 
 
@@ -124,10 +134,14 @@ tw board --date 2026-04-01
 | `↑` / `↓` | Seçili kolonda satır                                                   |
 | `s`       | Seçili görevi Doing’e al                                               |
 | `d`       | Seçili görevi Done’a al                                                |
+| `b`       | Seçili görevi bir kolon geri al (Done→Doing→Todo)                      |
 | `a`       | Done kolonu: bugünün tamamlananları ↔ tüm tamamlananlar arasında geçiş |
 | `g`       | İstatistik ekranına geç                                                |
 | `q`       | Çıkış                                                                  |
+| `:`       | Komut satırı (aşağıya bakın)                                           |
+| `Esc`     | Komut satırında iptal                                                  |
 
+**Komut satırı (`:`):** Örneğin `add Yeni görev` veya `start 01ABC123` yazın (`tw` öneki isteğe bağlı). **Enter** ile çalıştırın, **Esc** ile iptal.
 
 **İstatistik ekranı:**
 
@@ -149,7 +163,11 @@ Yeni görev **CLI** ile eklenir: `tw add "…"`.
 - Ortalama **lead** süresi (gün): oluşturma → tamamlanma  
 - Aktif gün başına düşen ortalama tamamlanan iş  
 - Yerel günlere göre **streak** (ardışık günler)  
-- Son günlerin kısa dökümü
+- Son günlerin kısa dökümü  
+
+`tw board` içindeki tam ekran istatistik görünümü:
+
+![İstatistik ekranı](images/stats.png)
 
 ### `tw log`
 
