@@ -19,7 +19,21 @@ Override with environment variable:
 
 ## Install and the `tw` command
 
-After building the project:
+### Prebuilt binary (no Rust)
+
+Download a release from [GitHub Releases](https://github.com/enesify/taskwal/releases). Each release includes archives per target and a `SHA256SUMS` file.
+
+**Linux / macOS** — optional install script (see repository `scripts/install-tw.sh`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/enesify/taskwal/master/scripts/install-tw.sh | bash
+```
+
+**Windows** — use the `taskwal-<version>-x86_64-pc-windows-msvc.zip` asset; extract `tw.exe` onto your `PATH`.
+
+### From source (Cargo)
+
+After cloning the project:
 
 ```bash
 cargo install --path /path/to/taskwal --force

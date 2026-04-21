@@ -34,6 +34,36 @@ For every subcommand, flag, and TUI key, see the full guides: **[docs/USAGE.md](
 
 ## Installation
 
+### Prebuilt binaries
+
+You do **not** need Rust or Cargo to run TaskWAL. Prebuilt `tw` binaries are attached to [GitHub Releases](https://github.com/enesify/taskwal/releases) for:
+
+- Linux x86_64 (`x86_64-unknown-linux-gnu`, typical glibc-based distros)
+- macOS Intel and Apple Silicon (`x86_64-apple-darwin`, `aarch64-apple-darwin`)
+- Windows x86_64 (`x86_64-pc-windows-msvc`)
+
+**Linux / macOS — install script** (default install dir: `~/.local/bin`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/enesify/taskwal/master/scripts/install-tw.sh | bash
+```
+
+System-wide install (e.g. `/usr/local/bin`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/enesify/taskwal/master/scripts/install-tw.sh | TASKWAL_PREFIX=/usr/local bash
+```
+
+Optional: `TASKWAL_REPO=owner/repo`, `TASKWAL_VERSION=v0.1.0` to pin a release.
+
+**Windows — manual install:** download `taskwal-<tag>-x86_64-pc-windows-msvc.zip` from Releases, verify `SHA256SUMS`, extract `tw.exe`, and place it on your `PATH`.
+
+**Manual (any platform):** download the matching `taskwal-<tag>-<target>.tar.gz` or `.zip`, verify checksums in `SHA256SUMS`, extract the `tw` binary, and move it to a directory on your `PATH`.
+
+**Maintainers:** create a release by pushing a git tag `vX.Y.Z` that matches the `version` in [`Cargo.toml`](Cargo.toml) (for example tag `v0.1.0` for `version = "0.1.0"`). The release workflow builds and uploads archives plus `SHA256SUMS`.
+
+### Build from source
+
 Requires [Rust](https://rustup.rs/) 1.70+.
 
 **Build** (binary at `target/release/tw`):
