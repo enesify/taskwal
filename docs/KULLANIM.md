@@ -23,7 +23,21 @@ TaskWAL, görevlerinizi **yerel bilgisayarınızda** tutan bir iş takip aracıd
 
 ## Kurulum ve `tw` komutu
 
-Projeyi derledikten sonra:
+### Önceden derlenmiş ikili (Rust gerekmez)
+
+Sürümler [GitHub Releases](https://github.com/enesify/taskwal/releases) üzerindedir; her sürümde hedefe göre arşivler ve `SHA256SUMS` dosyası bulunur.
+
+**Linux / macOS** — isteğe bağlı kurulum betiği (depodaki `scripts/install-tw.sh`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/enesify/taskwal/master/scripts/install-tw.sh | bash
+```
+
+**Windows** — `taskwal-<sürüm>-x86_64-pc-windows-msvc.zip` dosyasını indirin; `tw.exe` dosyasını `PATH` üzerinde bir konuma çıkarın.
+
+### Kaynak koddan (Cargo)
+
+Projeyi klonladıktan sonra:
 
 ```bash
 cargo install --path /proje/yolu --force
